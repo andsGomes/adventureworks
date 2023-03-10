@@ -18,7 +18,9 @@ public class Program
     string Sql = "SELECT top 3 * FROM SalesLT.Product";
 
     ProductRepository repo = new();
-    List<Product> list = repo.Search(ConnectString, Sql);
+    //List<Product> list = repo.Search(ConnectString, Sql);
+    List<Product> list = repo.Search<Product>(ConnectString, Sql);
+
 
     Console.WriteLine("*** Display the Data ***");
     // Display Data
