@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Data;
 using adventureWorks.Common;
 using adventureWorks.Entities;
-
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace adventureWorks.Repository
 {
@@ -62,7 +62,7 @@ namespace adventureWorks.Repository
     protected virtual List<TEntity> BuildEntityList<TEntity>(IDataReader rdr)
     {
       List<TEntity> ret = new();
-      string colunName;
+      string columnName;
       // Get all the properties in <TEntity>
       PropertyInfo[] props = typeof(TEntity).GetProperties();
       // Loop throungh all rows in the data reader
@@ -70,24 +70,51 @@ namespace adventureWorks.Repository
       {
         // Create new instance of Entity
         TEntity entity = Activator.CreateInstance<TEntity>();
-        // Loop throungh columns in data reader
         for (int index = 0; index < rdr.FieldCount; index++)
         {
           // Get field name from data reader
-          colunName = rdr.GetName(index);
-          // Get property that matches the field name
-          PropertyInfo col = props.FirstOrDefault(col => col.Name == colunName);
+          columnName = rdr.GetName(index);
+
+          // Get property in entity that matches the field name
+          PropertyInfo col = props.FirstOrDefault(col => col.Name == columnName);
+
+          if (col == null)
+          {
+            // Is column name in a [Column] attribute?
+            col = props.FirstOrDefault(c => c.GetCustomAttribute<ColumnAttribute>()?.Name == columnName);
+          }
+
           if (col != null)
           {
             // Get the value from the table
-            var value = rdr[colunName];
-            // Assign value to property if not null
+            var value = rdr[columnName];
+
+            // Assign value to the property if not null
             if (!value.Equals(DBNull.Value))
             {
               col.SetValue(entity, value, null);
             }
           }
         }
+
+        // Loop throungh columns in data reader
+        // for (int index = 0; index < rdr.FieldCount; index++)
+        // {
+        //   // Get field name from data reader
+        //   colunName = rdr.GetName(index);
+        //   // Get property that matches the field name
+        //   PropertyInfo col = props.FirstOrDefault(col => col.Name == colunName);
+        //   if (col != null)
+        //   {
+        //     // Get the value from the table
+        //     var value = rdr[colunName];
+        //     // Assign value to property if not null
+        //     if (!value.Equals(DBNull.Value))
+        //     {
+        //       col.SetValue(entity, value, null);
+        //     }
+        //   }
+        // }
         ret.Add(entity);
       }
       return ret;
