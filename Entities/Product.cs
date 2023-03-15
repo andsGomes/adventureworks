@@ -16,11 +16,12 @@ namespace adventureWorks.Entities
     public DateTime SellStartDate { get; set; }
     public DateTime SellEndDate { get; set; }
     public DateTime DiscontinuedDate { get; set; }
+    [NotMapped]
+    public bool IsSelected {get; set; }
 
-    public override string ToString()
-    {
-      return $"Product Name: {ProductName} - Product Id: {Id} - List Price: {ListPrice} ";
-    }
+    public override string ToString() => $"Product Name: {ProductName} - Product Id: {Id} - List Price: {ListPrice} ";
   }
+
+
 
 }
