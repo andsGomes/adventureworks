@@ -1,14 +1,31 @@
+using System.Text;
 
 using System.Reflection;
 using System.Data;
 using adventureWorks.Common;
 using adventureWorks.Entities;
 using System.ComponentModel.DataAnnotations.Schema;
-
 namespace adventureWorks.Repository
 {
   public class ProductRepository
   {
+
+    public string SchemaName { get; set; }
+    public string TableName { get; set; }
+    public List<ColumnMapper> Columns { get; set; }
+    public string SQL { get; set; }
+
+    public ProductRepository()
+    {
+      Init();
+    }
+    protected virtual void Init()
+    {
+      SchemaName = "dbo";
+      TableName = string.Empty;
+      SQL = string.Empty;
+      Columns = new List<ColumnMapper>();
+    }
 
     // public virtual List<Product> Search(string connectString, string sql)
     // {
@@ -20,18 +37,55 @@ namespace adventureWorks.Repository
     //   return ret;
     // }
 
-    public virtual List<TEntity> Search<TEntity>(string connectString, string sql)
+    public virtual List<TEntity> Search<TEntity>(string connectString)
     {
       List<TEntity> ret;
+      
+      // Build SELECT statement
+      SQL = BuildSelectSql<TEntity>();
 
       using SqlServerDatabaseContext dbContext = new(connectString);
-      dbContext.CreateCommand(sql);
+      dbContext.CreateCommand(SQL);
 
       ret = BuildEntityList<TEntity>(dbContext.CreateDataReader());
 
       return ret;
     }
-
+    protected virtual void SetTableAndSchemaName(Type typ)
+    {
+      // Is there is a [Table] attribute?
+      TableAttribute table = typ.GetCustomAttribute<TableAttribute>();
+      // Assume table name is the class name 
+      TableName = typ.Name;
+      if (table != null)
+      {
+        // Set properties form [table] attribute
+        TableName = table.Name;
+        SchemaName = table.Schema ?? SchemaName;
+      }
+    }
+    // Add method to create a SELECT statement
+    protected virtual string BuildSelectSql<TEntity>()
+    {
+      Type typ = typeof(TEntity);
+      StringBuilder sb = new StringBuilder(2048);
+      string comma = string.Empty;
+      // Build column mapping collection 
+      Columns = BuildColumnCollection<TEntity>();
+      // Set Table and Schema properties; 
+      SetTableAndSchemaName(typ);
+      // Build the SELECT statemnet
+      sb.Append("SELECT ");
+      foreach (ColumnMapper item in Columns)
+      {
+        // Add column
+        sb.Append($"{comma}[{item.ColumnName}]");
+        comma = ", ";
+      }
+      // Add From shema.table
+      sb.Append($"From {SchemaName}.{TableName}");
+      return sb.ToString();
+    }
 
     // First implementation of the BuilderEntityList method
     // protected virtual List<Product> BuildEntityList(IDataReader rdr)
@@ -57,68 +111,73 @@ namespace adventureWorks.Repository
 
     //   return ret;
     // }
+    //  New generic implementation of the method to create the query return colletion
+    protected virtual List<ColumnMapper> BuildColumnCollection<TEntity>()
+    {
+      List<ColumnMapper> ret = new List<ColumnMapper>();
+      ColumnMapper colMap;
+      // Get all the properties in <TEntity>
+      PropertyInfo[] props = typeof(TEntity).GetProperties();
+      // Loop Through all properties
+      foreach (PropertyInfo prop in props)
+      {
+        //Is there a [NotMapped] attribute?
+        NotMappedAttribute nm = prop.GetCustomAttribute<NotMappedAttribute>();
+        // Only add properties that map to a column
+        if (nm == null)
+        {
+          // Create a column mapping object
+          colMap = new ColumnMapper()
+          {
+            PropertyInfo = prop,
+            ColumnName = prop.Name,
+          };
+          // Is column name in [Colunm] attr
+          ColumnAttribute ca = prop.GetCustomAttribute<ColumnAttribute>();
+          if (ca != null && !string.IsNullOrEmpty(ca.Name))
+          {
+            // Set column name from [Column] attr
+            colMap.ColumnName = ca.Name;
+          }
+          // Create colletion of columns
+          ret.Add(colMap);
+        }
 
+      }
+      return ret;
+
+    }
     //  New implememtation of the BuildEntityList method, transforms it into a generic method
     protected virtual List<TEntity> BuildEntityList<TEntity>(IDataReader rdr)
     {
       List<TEntity> ret = new();
-      string columnName;
-      // Get all the properties in <TEntity>
-      PropertyInfo[] props = typeof(TEntity).GetProperties();
-      // Loop throungh all rows in the data reader
+
+      // Loop through all rows in the data reader
       while (rdr.Read())
       {
         // Create new instance of Entity
         TEntity entity = Activator.CreateInstance<TEntity>();
-        for (int index = 0; index < rdr.FieldCount; index++)
+
+        // Loop through columns collection
+        for (int index = 0; index < Columns.Count; index++)
         {
-          // Get field name from data reader
-          columnName = rdr.GetName(index);
+          // Get the value from the reader
+          var value = rdr[Columns[index].ColumnName];
 
-          // Get property in entity that matches the field name
-          PropertyInfo col = props.FirstOrDefault(col => col.Name == columnName);
-
-          if (col == null)
+          // Assign value to the property if not null
+          if (!value.Equals(DBNull.Value))
           {
-            // Is column name in a [Column] attribute?
-            col = props.FirstOrDefault(c => c.GetCustomAttribute<ColumnAttribute>()?.Name == columnName);
-          }
-
-          if (col != null)
-          {
-            // Get the value from the table
-            var value = rdr[columnName];
-
-            // Assign value to the property if not null
-            if (!value.Equals(DBNull.Value))
-            {
-              col.SetValue(entity, value, null);
-            }
+            Columns[index].PropertyInfo.SetValue(entity, value, null);
           }
         }
 
-        // Loop throungh columns in data reader
-        // for (int index = 0; index < rdr.FieldCount; index++)
-        // {
-        //   // Get field name from data reader
-        //   colunName = rdr.GetName(index);
-        //   // Get property that matches the field name
-        //   PropertyInfo col = props.FirstOrDefault(col => col.Name == colunName);
-        //   if (col != null)
-        //   {
-        //     // Get the value from the table
-        //     var value = rdr[colunName];
-        //     // Assign value to property if not null
-        //     if (!value.Equals(DBNull.Value))
-        //     {
-        //       col.SetValue(entity, value, null);
-        //     }
-        //   }
-        // }
+        // Add new entity to the list
         ret.Add(entity);
       }
+
       return ret;
     }
+
 
 
 
